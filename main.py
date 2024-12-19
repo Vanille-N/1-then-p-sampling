@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TypeVar, Generic
 from random import random
+import matplotlib.pyplot as plt
 
 T = TypeVar("T")
 
@@ -53,15 +54,18 @@ class Sample(Generic[T]):
         self.nb += 1
         self.counts[v] = self.counts.get(v, 0) + 1
 
-    def delta(self, distr):
-        e = {}
-        for ww in distr.vals:
-            value = ww.val.val
-            real_weight = ww.val.weight / distr.sum
-            est_weight = self.counts.get(value, 0) / self.nb
-            e[value] = (real_weight, est_weight)
-        return e
+    def merge(self, other):
+        total = { v: self.counts.get(v, 0) + other.counts.get(v, 0) for v in set(self.counts) | set(other.counts) }
+        return Sample(self.nb + other.nb, total)
 
+    def freq_of(self, evt):
+        return self.counts.get(evt, 0) / self.nb
+
+def regular_sample(d, nb):
+    s = Sample.empty()
+    while s.nb < nb:
+        s.add(d.sample())
+    return s
 
 def naive_full_sample(d, nb):
     s = Sample.empty()
@@ -85,23 +89,31 @@ def better_full_sample(d, nb):
     return s
 
 d = Distribution.empty()
-d.add(W(0.1, 'a'))
-d.add(W(0.1, 'b'))
-d.add(W(9.8, 'c'))
-s1 = naive_full_sample(d, 30)
-s2 = better_full_sample(d, 30)
-print(s1)
-print(s2)
+d.add(W(0.01, 'a'))
+d.add(W(0.01, 'b'))
+d.add(W(0.02, 'c'))
+d.add(W(0.02, 'd'))
+d.add(W(0.04, 'e'))
+d.add(W(0.90, 'z'))
 
-e1 = s1.delta(d)
-e2 = s2.delta(d)
-print(e1)
-print(e2)
+def repeat_sample(sampler, repeat):
+    s = Sample.empty()
+    for _ in range(repeat):
+        s = s.merge(sampler())
+    return s
 
+def data_freq_of(sampler, distrib, size, repeat, evt):
+    return repeat_sample(lambda: sampler(distrib, size), repeat).freq_of(evt)
 
+def range_data_freq_of(sampler, distrib, sizes, repeat, evt):
+    return [data_freq_of(sampler, distrib, size, repeat, evt) for size in sizes]
 
+def plot_perf_sampler(sampler, distrib, sizes, repeats, evt):
+    data = range_data_freq_of(sampler, distrib, sizes, repeats, evt)
+    plt.plot(data)
 
-
-
-
-
+repeats = range(len(d.vals), 300)
+plot_perf_sampler(regular_sample, d, repeats, 1000, 'a')
+plot_perf_sampler(naive_full_sample, d, repeats, 1000, 'a')
+plot_perf_sampler(better_full_sample, d, repeats, 1000, 'a')
+plt.show()
